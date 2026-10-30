@@ -100,6 +100,55 @@ async function loadProfile() {
   profile = data;
 }
 
+
+async function ensureProfile() {
+  if (!session) return;
+
+  await loadProfile();
+  if (profile) return;
+
+  const metadata = session.user.user_metadata || {};
+  let p = null;
+
+  try {
+    const saved = localStorage.getItem('sg_pending');
+    if (saved) p = JSON.parse(saved);
+  } catch (err) {
+    console.error(err);
+  }
+
+  const year = metadata.school_year || p?.school_year;
+  const first_name = metadata.first_name || p?.first_name;
+  const last_name = metadata.last_name || p?.last_name;
+
+  const section = year === '1ere'
+    ? 'general'
+    : (metadata.section || p?.section || null);
+
+  const optional_language =
+    metadata.optional_language || p?.optional_language || null;
+
+  if (
+    !first_name ||
+    !last_name ||
+    !year ||
+    (branches[year] && !section) ||
+    (['3eme', '4eme'].includes(year) && !optional_language)
+  ) {
+    return;
+  }
+
+  await saveProfile({
+    first_name,
+    last_name,
+    school_year: year,
+    section,
+    optional_language
+  });
+
+  localStorage.removeItem('sg_pending');
+}
+
 async function sync() {
   if (!db) return;
 
@@ -115,9 +164,9 @@ async function sync() {
 
   if (session) {
     try {
-      await loadProfile();
+      await ensureProfile();
     } catch (err) {
-      console.error(err);
+      console.error('Erreur de synchronisation du profil :', err);
     }
   }
 
@@ -140,6 +189,7 @@ async function sync() {
     });
   }
 }
+
 
 if (db) {
   db.auth.onAuthStateChange(() => {
