@@ -6,7 +6,99 @@
 const $=id=>document.getElementById(id),cfg=window.STUDY_GROUP_CONFIG||{},db=cfg.url&&cfg.anonKey&&window.supabase?window.supabase.createClient(cfg.url,cfg.anonKey):null;let lang='fr',profile=null,session=null,currentPage='home',currentSubject='',currentCategory='Résumés';const branches={"2eme":["sciences","lettres","economie","informatique"],"3eme":["sciences","mathematiques","lettres","economie","technique","informatique","sport"],"4eme":["sciences","mathematiques","lettres","economie","technique","informatique","sport"]},optionals=[['es','Espagnol'],['it','Italien'],['de','Allemand'],['zh','Chinois'],['tr','Turc'],['art','Arts plastiques'],['music','Musique']];const names={sciences:'Sciences',mathematiques:'Mathématiques',lettres:'Lettres',economie:'Économie et gestion',informatique:'Informatique',technique:'Technique',sport:'Sport'};const translations={fr:{home:'⌂ Accueil',account:'♙ Mon compte',files:'▤ Mes fichiers',eyebrow:'🇹🇳 Pour les collégiens et lycéens tunisiens',headline:'Ton avenir commence ici.',heroText:"Un espace pensé pour apprendre, progresser et s'entraider. Ensemble, rendons les études plus simples.",join:'Rejoins-nous gratuitement',why:'Pourquoi Study Group.tn ?',whySub:'Une plateforme créée pour les élèves tunisiens.',safe:'Accès protégé',safeText:'Un espace adapté à ton niveau.',easy:'Simple et rapide',easyText:'Conçu pour téléphone et ordinateur.',community:'Entraide',communityText:'Partage tes connaissances.',levels:'Collège et lycée',levelsText:'Du collège au baccalauréat.',upload:'Ajouter un document'},ar:{home:'⌂ الرئيسية',account:'♙ حسابي',files:'▤ ملفاتي',eyebrow:'🇹🇳 لتلاميذ الإعدادي والثانوي في تونس',headline:'مستقبلك يبدأ من هنا.',heroText:'مساحة للتعلّم والتطوّر والتعاون. مع بعضنا، قرايتنا تولّي أسهل.',join:'انضم مجانًا',why:'علاش Study Group.tn؟',whySub:'منصة صُنعت للتلاميذ التونسيين.',safe:'وصول محمي',safeText:'مساحة مناسبة لمستواك.',easy:'سهل وسريع',easyText:'للهاتف والحاسوب.',community:'نتعاونوا',communityText:'شارك معرفتك مع غيرك.',levels:'إعدادي وثانوي',levelsText:'من الإعدادي إلى الباكالوريا.',upload:'إضافة ملف'}};
 function tr(k){return translations[lang][k]||k}function updateLang(){document.documentElement.lang=lang;document.documentElement.dir=lang==='ar'?'rtl':'ltr';document.body.classList.toggle('rtl',lang==='ar');$('langBtn').textContent=lang==='fr'?'AR':'FR';document.querySelectorAll('[data-t]').forEach(el=>el.textContent=tr(el.dataset.t));$('authBtn').textContent=session?(lang==='fr'?'Mon compte':'حسابي'):(lang==='fr'?'Connexion':'الدخول');if(profile)renderProfile()}$('langBtn').onclick=()=>{lang=lang==='fr'?'ar':'fr';updateLang()};function menu(open){$('sidebar').classList.toggle('hidden',!open);$('sideback').classList.toggle('hidden',!open);$('menuBtn').setAttribute('aria-expanded',String(open))}$('menuBtn').onclick=()=>menu($('sidebar').classList.contains('hidden'));$('sideback').onclick=()=>menu(false);document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));function modal(open=true){$('overlay').classList.toggle('hidden',!open)}function mode(m){$('welcomeActions').classList.toggle('hidden',m!=='welcome');$('signupForm').classList.toggle('hidden',m!=='signup');$('loginForm').classList.toggle('hidden',m!=='login');$('authStatus').textContent=''}$('closeModal').onclick=()=>modal(false);$('showSignup').onclick=()=>mode('signup');$('showLogin').onclick=()=>mode('login');$('heroBtn').onclick=()=>{if(session&&profile)navigate('files');else{mode('welcome');modal(true)}};$('authBtn').onclick=()=>session?navigate('account'):(mode('login'),modal(true));function navigate(p){menu(false);if(p!=='home'&&(!session||!profile)){mode(session?'signup':'welcome');modal(true);return}currentPage=p;['home','account','files'].forEach(id=>$(id).classList.toggle('hidden',id!==p));if(p==='account')renderProfile();if(p==='files')renderSubjects();window.scrollTo(0,0)}
 $('year').onchange=()=>{let y=$('year').value,show=!!branches[y];$('section').classList.toggle('hidden',!show);$('section').required=show;$('section').innerHTML='<option value="">Choisir ma section</option>'+(branches[y]||[]).map(s=>`<option value="${s}">${names[s]}</option>`).join('');let opt=['3eme','4eme'].includes(y);$('optional').classList.toggle('hidden',!opt);$('optional').required=opt;$('optional').innerHTML='<option value="">Matière optionnelle</option>'+optionals.map(([k,v])=>`<option value="${k}">${v}</option>`).join('')};function pending(){return{first_name:$('firstName').value.trim(),last_name:$('lastName').value.trim(),school_year:$('year').value,section:$('section').classList.contains('hidden')?null:$('section').value,optional_language:$('optional').classList.contains('hidden')?null:$('optional').value}}function status(msg,bad=false){$('authStatus').textContent=msg;$('authStatus').className=bad?'small error':'small success'}function configured(){if(!db){status('Configure Supabase dans config.js avant de créer un compte.',true);return false}return true}async function saveProfile(p){if(!db||!session)return;const{error}=await db.from('student_profiles').upsert({id:session.user.id,...p},{onConflict:'id'});if(error)throw error;await loadProfile()}
-$('signupForm').onsubmit=async e=>{e.preventDefault();if(!configured())return;const p=pending();if(!p.first_name||!p.last_name||!p.school_year||(branches[p.school_year]&&!p.section)||(['3eme','4eme'].includes(p.school_year)&&!p.optional_language)){status('Complète ton profil scolaire.',true);return}try{localStorage.setItem('sg_pending',JSON.stringify(p));const{data,error}=await db.auth.signUp({email:$('signupEmail').value,password:$('signupPassword').value,options:{emailRedirectTo:location.origin+location.pathname,data:{first_name:p.first_name,last_name:p.last_name}}});if(error)throw error;if(data.session){session=data.session;await saveProfile(p);modal(false);navigate('account')}else status('Vérifie ton email, puis connecte-toi pour finaliser ton profil.')}catch(err){status(err.message,true)}};$('loginForm').onsubmit=async e=>{e.preventDefault();if(!configured())return;try{const{error}=await db.auth.signInWithPassword({email:$('loginEmail').value,password:$('loginPassword').value});if(error)throw error;await sync();if(profile){modal(false);navigate('account')}else{status('Complète ton profil scolaire.');mode('signup')}}catch(err){status(err.message,true)}};async function google(){if(!configured())return;const p=pending();if(p.first_name&&p.last_name&&p.school_year&&(!branches[p.school_year]||p.section)&&(!['3eme','4eme'].includes(p.school_year)||p.optional_language))localStorage.setItem('sg_pending',JSON.stringify(p));const{error}=await db.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});if(error)status(error.message,true)}$('googleSignup').onclick=google;$('googleLogin').onclick=google;
-async function loadProfile(){const{data,error}=await db.from('student_profiles').select('*').eq('id',session.user.id).maybeSingle();if(error)throw error;profile=data;if(!profile){const raw=localStorage.getItem('sg_pending');if(raw){try{await saveProfile(JSON.parse(raw));localStorage.removeItem('sg_pending')}catch(err){status(err.message,true)}}}}async function sync(){if(!db)return;const{data}=await db.auth.getSession();session=data.session;profile=null;if(session){try{await loadProfile()}catch(err){console.error(err)}}updateLang();if(!session){navigate('home');mode('welcome');modal(true)}else if(!profile){mode('signup');modal(true)}else{modal(false);navigate(currentPage)}}if(db){db.auth.onAuthStateChange(()=>setTimeout(sync,0));sync()}else{updateLang();setTimeout(()=>{mode('welcome');modal(true)},450)}$('sideAuth').onclick=async()=>{menu(false);if(session&&db){await db.auth.signOut();session=null;profile=null;navigate('home');mode('welcome');modal(true)}else{mode('login');modal(true)}};
+
+$('signupForm').onsubmit = async e => {
+  e.preventDefault();
+  if (!configured()) return;
+
+  const p = pending();
+  const email = $('signupEmail').value.trim();
+  const password = $('signupPassword').value;
+
+  if (
+    !p.first_name ||
+    !p.last_name ||
+    !p.school_year ||
+    (branches[p.school_year] && !p.section) ||
+    (['3eme', '4eme'].includes(p.school_year) &&
+      !p.optional_language)
+  ) {
+    status('Complète toutes les informations demandées.', true);
+    return;
+  }
+
+  const submitButton = $('signupForm').querySelector(
+    'button[type="submit"]'
+  );
+
+  submitButton.disabled = true;
+  submitButton.textContent = 'Création du compte…';
+
+  try {
+    const { data, error } = await db.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: location.origin + location.pathname,
+        data: {
+          first_name: p.first_name,
+          last_name: p.last_name,
+          school_year: p.school_year,
+          section:
+            p.school_year === '1ere'
+              ? 'general'
+              : p.section,
+          optional_language: p.optional_language
+        }
+      }
+    });
+
+    if (error) throw error;
+
+    if (data.session) {
+      session = data.session;
+      await sync();
+
+      if (!profile) {
+        throw new Error(
+          'Le compte est créé, mais le profil scolaire est introuvable.'
+        );
+      }
+
+      modal(false);
+      navigate('files');
+    } else {
+      mode('login');
+      status(
+        'Compte créé ! Confirme ton adresse email avec le lien reçu. ' +
+        'Ton profil scolaire est déjà enregistré : tu n’auras pas à le remplir une deuxième fois.'
+      );
+    }
+  } catch (err) {
+    status(err.message, true);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = 'Créer mon compte';
+  }
+};
+$('loginForm').onsubmit=async e=>{e.preventDefault();if(!configured())return;try{const{error}=await db.auth.signInWithPassword({email:$('loginEmail').value,password:$('loginPassword').value});if(error)throw error;await sync();if(profile){modal(false);navigate('account')}else{status('Complète ton profil scolaire.');mode('signup')}}catch(err){status(err.message,true)}};async function google(){if(!configured())return;const p=pending();if(p.first_name&&p.last_name&&p.school_year&&(!branches[p.school_year]||p.section)&&(!['3eme','4eme'].includes(p.school_year)||p.optional_language))localStorage.setItem('sg_pending',JSON.stringify(p));const{error}=await db.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});if(error)status(error.message,true)}$('googleSignup').onclick=google;$('googleLogin').onclick=google;
+
+async function loadProfile() {
+  if (!db || !session) {
+    profile = null;
+    return;
+  }
+
+  const { data, error } = await db
+    .from('student_profiles')
+    .select('*')
+    .eq('id', session.user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  profile = data;
+}
+async function sync(){if(!db)return;const{data}=await db.auth.getSession();session=data.session;profile=null;if(session){try{await loadProfile()}catch(err){console.error(err)}}updateLang();if(!session){navigate('home');mode('welcome');modal(true)}else if(!profile){mode('signup');modal(true)}else{modal(false);navigate(currentPage)}}if(db){db.auth.onAuthStateChange(()=>setTimeout(sync,0));sync()}else{updateLang();setTimeout(()=>{mode('welcome');modal(true)},450)}$('sideAuth').onclick=async()=>{menu(false);if(session&&db){await db.auth.signOut();session=null;profile=null;navigate('home');mode('welcome');modal(true)}else{mode('login');modal(true)}};
 function safe(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function renderProfile(){if(!profile)return;$('profile').innerHTML=`<h2>${safe(profile.first_name)} ${safe(profile.last_name)}</h2><p>✉ ${safe(session?.user?.email)}</p><p>🎓 ${safe(profile.school_year)}</p><p>📘 ${safe(profile.section||'Tronc commun')}</p><p>⭐ ${safe(profile.optional_language||'—')}</p><p class="notice">Les niveaux et sections confirmés ne sont pas modifiables par les élèves.</p>`}const common=[['Mathématiques','📐'],['Français','📖'],['Arabe','✍️'],['Anglais','🌍'],['Histoire','🏛️'],['Géographie','🗺️'],['Éducation islamique','🌙']];function getSubjects(){const y=profile.school_year,s=profile.section;let list=[...common];if(y.endsWith('base'))list.push(['Sciences physiques','⚗️'],['Sciences de la vie et de la Terre','🧬'],['Éducation civique','⚖️'],['Technologie','⚙️']);else{list.push(['Physique','⚗️'],['SVT','🧬'],['Informatique','💻']);if(y!=='1ere')list.push(['Philosophie','💭']);if(s==='economie')list.push(['Économie','📊'],['Gestion','💼']);if(s==='technique')list.push(['Sciences techniques','🔧']);if(['3eme','4eme'].includes(y)&&profile.optional_language){let o=optionals.find(x=>x[0]===profile.optional_language);if(o)list.push([o[1],'🎨'])}}return list}function renderSubjects(){$('fileView').classList.add('hidden');$('subjectGrid').classList.remove('hidden');$('levelCaption').textContent=[profile.school_year,profile.section,profile.optional_language].filter(Boolean).join(' · ');$('subjectGrid').innerHTML=getSubjects().map(([n,icon])=>`<button class="subject" data-subject="${safe(n)}"><div style="font-size:33px;margin-bottom:12px">${icon}</div>${safe(n)}</button>`).join('');document.querySelectorAll('[data-subject]').forEach(b=>b.onclick=()=>openSubject(b.dataset.subject))}function openSubject(s){currentSubject=s;currentCategory='Résumés';$('subjectGrid').classList.add('hidden');$('fileView').classList.remove('hidden');$('subjectTitle').textContent=s;renderTabs()}$('backSubjects').onclick=renderSubjects;function renderTabs(){$('tabs').innerHTML=['Résumés','Cours','Séries','Exercices'].map(x=>`<button class="tab ${x===currentCategory?'active':''}" data-cat="${x}">${x}</button>`).join('');document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{currentCategory=b.dataset.cat;renderTabs()});loadFiles()}async function loadFiles(){const el=$('fileList');el.textContent='Chargement…';if(!db||!profile){el.textContent='Configuration requise.';return}const{data,error}=await db.from('resources').select('id,title,storage_path,created_at').eq('subject',currentSubject).eq('category',currentCategory).order('created_at',{ascending:false});if(error){el.textContent='Lecture impossible : '+error.message;return}el.innerHTML='';if(!data?.length){el.textContent='Aucun document dans cette catégorie.';return}for(const r of data){const div=document.createElement('div');div.className='fileitem';const label=document.createElement('span');label.textContent='📄 '+r.title;const btn=document.createElement('button');btn.className='btn outline';btn.textContent='Voir / Télécharger';btn.onclick=async()=>{const{data:link,error:e}=await db.storage.from('resources').createSignedUrl(r.storage_path,60);if(e)alert(e.message);else window.open(link.signedUrl,'_blank','noopener')};div.append(label,btn);el.append(div)}}$('uploadBtn').onclick=async()=>{const out=$('uploadStatus'),f=$('fileInput').files[0],title=$('fileTitle').value.trim();if(!db||!profile||!f||!title){out.textContent='Indique un titre et choisis un fichier.';return}if(f.size>10*1024*1024){out.textContent='Taille maximale : 10 Mo.';return}out.textContent='Envoi…';const ext=(f.name.split('.').pop()||'pdf').toLowerCase();if(!['pdf','doc','docx','ppt','pptx','png','jpg','jpeg'].includes(ext)){out.textContent='Format non autorisé.';return}const path=`${session.user.id}/${crypto.randomUUID()}.${ext}`;const{error:up}=await db.storage.from('resources').upload(path,f,{upsert:false});if(up){out.textContent=up.message;return}const{error}=await db.from('resources').insert({title,subject:currentSubject,category:currentCategory,storage_path:path,owner_id:session.user.id,school_year:profile.school_year,section:profile.section,optional_language:optionals.some(x=>x[1]===currentSubject)?profile.optional_language:null});if(error){await db.storage.from('resources').remove([path]);out.textContent=error.message;return}out.textContent='Document ajouté.';$('fileTitle').value='';$('fileInput').value='';loadFiles()};
 </script></body></html>
